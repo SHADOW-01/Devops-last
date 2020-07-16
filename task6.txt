@@ -1,0 +1,78 @@
+job("dt6 Job1"){
+  description("this will download then copy code from github")
+	scm {
+		github('SHADOW-01/dtask6','master')
+	}
+     		
+	triggers {
+		scm("* * * * *")
+	}
+     steps {
+        shell('''
+        sudo rm -rf /task6
+        sudo mkdir /task6
+        sudo cp -rvf * /task6
+		''')
+    }
+}
+job("dt6 job2"){
+  description("for checking code type")
+	triggers {
+        upstream('dt6 Job1', 'SUCCESS')
+    }
+     steps {
+        shell('''
+		if sudo ls /task6 | grep html
+      		then
+		  if sudo kubectl get pvc | grep html
+		  then
+ 		  echo "pvc for html already created"
+		  else
+		  sudo kubectl create -f /task6/html-pvc.yml 
+		  fi
+		  if sudo kubectl get deploy | grep html-webserver
+		  then
+		    echo "already running"
+		  else
+		    sudo kubectl create -f /task6/html-deploy.yml 
+		  fi
+		else
+		echo "no html code from developer to host"
+		fi
+		htmlpod=$(sudo kubectl get pod -l app=html-webserver -o jsonpath="{.items[0].metadata.name}" )
+		sudo kubectl cp /task6/*.html   $htmlpod:/usr/local/apache2/htdocs ''')
+		
+    }
+}
+job("dt6 Job3")
+{
+description ("This is third d6J of groovy project")
+    triggers {
+        upstream('dt6 Job2', 'SUCCESS')
+    }
+steps{
+shell(''' status=$(curl -o /dev/null -sw "%{http_code}" http://192.168.99.101:31000/)
+if [[$status == 200 ]]
+then
+		echo "running"
+		exit 0	
+		else
+		cd /task6
+		python3 fail.py
+       		 exit 1
+fi ''')
+}
+
+}
+
+
+buildPipelineView('task_6_pipeline') {
+  filterBuildQueue(true)
+  filterExecutors(false)
+  title('task_6_pipeline')
+  displayedBuilds(1)
+  selectedJob('dt6 Job1')
+  alwaysAllowManualTrigger(false)
+  showPipelineParameters(true)
+  refreshFrequency(1)
+}
